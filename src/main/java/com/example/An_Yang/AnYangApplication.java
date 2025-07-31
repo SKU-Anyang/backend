@@ -1,0 +1,13 @@
+package com.example.An_Yang;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class AnYangApplication {
+
+	public static void main(String[] args) {
+		SpringApplication.run(AnYangApplication.class, args);
+	}
+
+}
