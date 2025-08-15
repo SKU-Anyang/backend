@@ -1,37 +1,43 @@
 package com.example.An_Yang.domain;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import jakarta.persistence.Column;
 import java.time.LocalDateTime;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 import lombok.Setter;
 
-@Getter @Setter
+@Getter
+@Setter
+@NoArgsConstructor
 @AllArgsConstructor
 @Entity
 @Table(name = "chat_history")
 public class ChatHistory {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+	private Long id;
 
-    private String question;
+	private String question;
 
-    @Column(columnDefinition = "TEXT")
-    private String answer;
-    private LocalDateTime askedAt;
+	@Column(columnDefinition = "TEXT")
+	private String answer;
 
-    public ChatHistory() {
-        super();
-    }
+	private LocalDateTime askedAt;
 
-    public ChatHistory(String question, String answer, LocalDateTime askedAt) {
-        this.question = question;
-        this.answer = answer;
-        this.askedAt = askedAt;
-    }
+	@Id
+	@GeneratedValue(strategy = GenerationType.IDENTITY)
+	public Long getId() {
+		return id;
+	}
 
+	public ChatHistory(String question, String answer, LocalDateTime askedAt) {
+		this.question = question;
+		this.answer = answer;
+		this.askedAt = askedAt;
+	}
 }
-
