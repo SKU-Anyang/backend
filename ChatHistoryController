@@ -45,4 +45,3 @@ public class ChatHistoryController {
 		return chatHistoryService.getLatestChatsByKeyword(keyword, limit);
 	}
 }
-
