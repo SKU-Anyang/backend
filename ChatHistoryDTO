@@ -9,8 +9,8 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @NoArgsConstructor
 public class ChatHistoryDTO {
-    private Long id;
-    private String question;
-    private String answer;
-    private LocalDateTime askedAt;
+	private Long id;
+	private String question;
+	private String answer;
+	private LocalDateTime askedAt;
 }
