@@ -9,5 +9,4 @@ public class AnYangApplication {
 	public static void main(String[] args) {
 		SpringApplication.run(AnYangApplication.class, args);
 	}
-
 }
