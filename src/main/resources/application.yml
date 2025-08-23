@@ -28,3 +28,11 @@ logging:
   level:
     org.springframework.security: DEBUG
 
+apis:
+  kakao:
+    baseUrl: https://dapi.kakao.com
+    restKey: 2bcc0b6ff4151cded333601b154a5427   # ← 네 REST API 키
+  ftc:
+    baseUrl: https://apis.data.go.kr/1130000/FftcIndutyFrcsOpclStatsService  # ← 뒤에 1 빼기
+    serviceKey: aXJCcoLEku2k0PufWIaxo2ePRT9rWVVelckIr1J+ssTxkwxL1ICglPeQeb9rlJ/5IDVpgVgscaZj8oHYk7VjTw==
+    op: getIndutyFrcsOpclOutStats
