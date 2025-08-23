@@ -6,7 +6,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 @SpringBootApplication
 public class AnYangApplication {
 
-	public static void main(String[] args) {
-		SpringApplication.run(AnYangApplication.class, args);
-	}
+    public static void main(String[] args) {
+        SpringApplication.run(AnYangApplication.class, args);
+    }
 }
