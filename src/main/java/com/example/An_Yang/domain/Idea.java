@@ -1,26 +1,33 @@
+// domain/Idea.java
 package com.example.An_Yang.domain;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
+import jakarta.persistence.*;
 import lombok.*;
+import java.time.LocalDateTime;
 
-@Entity
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
+@Entity @Table(name = "idea")
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class Idea {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private String keyword;
+    @ManyToOne(fetch = FetchType.LAZY) // 생성자
+    @JoinColumn(name = "created_by_user_id")
+    private User createdBy;
 
-    private String description;
+    private String title;
+
+    @Column(length = 1000)
+    private String summary;
+
+    @Lob
+    private String contentJson; // AI 원본 JSON(선택)
+
+    private String industry;
+    private String region;
+
+    private Integer closureYear;
+    private Double closureRate;
+
+    private LocalDateTime createdAt;
 }
-
-

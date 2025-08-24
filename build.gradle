@@ -24,6 +24,8 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0'
 	implementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-xml'
+	implementation 'org.apache.commons:commons-csv:1.11.0'
+
 
 	// ✅ Gemini 공식 Java SDK (Google GenAI SDK)
 	//implementation 'com.google.genai:google-genai:1.14.0'
@@ -35,6 +37,9 @@ dependencies {
 
 	// DB
 	runtimeOnly 'com.mysql:mysql-connector-j'
+
+	runtimeOnly "io.netty:netty-resolver-dns-native-macos:4.1.123.Final:osx-aarch_64"
+
 
 	// Lombok
 	compileOnly 'org.projectlombok:lombok'

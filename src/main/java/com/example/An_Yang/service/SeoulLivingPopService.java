@@ -3,71 +3,79 @@ package com.example.An_Yang.service;
 import com.example.An_Yang.DTO.LivingPopPoint;
 import io.micrometer.common.lang.Nullable;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Qualifier;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
+
+import static com.example.An_Yang.service.CsvUtils.*;
 
 @Service
 @RequiredArgsConstructor
 public class SeoulLivingPopService {
 
-    private final @Qualifier("seoulClient") WebClient seoulClient;   // ✅ 정확한 WebClient 지정
-    @Value("${apis.seoul.key}") private String key;                  // 환경변수
-    @Value("${apis.seoul.svc.livingByDong}") private String svc;     // 예: SPOP_LOCAL_RESD_DONG
+    private static final Logger log = LoggerFactory.getLogger(SeoulLivingPopService.class);
 
-    /**
-     * 날짜(yyyymmdd) + 행정동코드(필수) + 시간대코드(선택) 호출
-     * 시간대 미지정: 하루 모든 시간대 반환
-     */
+    @Value("${data.csv.seoulLivingPop}")
+    private String csvPath;
+
     public Mono<List<LivingPopPoint>> hourlyByDong(String yyyymmdd, String dongCode, @Nullable String tmzonPdSe) {
-        final String path = (tmzonPdSe == null || tmzonPdSe.isBlank())
-                // 날짜+동 (시간대 생략 → 빈 세그먼트 // 필수)
-                ? String.format("/%s/json/%s/1/1000/%s//%s", key, svc, yyyymmdd, dongCode)
-                // 날짜+시간대+동
-                : String.format("/%s/json/%s/1/1000/%s/%s/%s", key, svc, yyyymmdd, tmzonPdSe, dongCode);
+        final String targetDate = left(digits(yyyymmdd), 8);  // 2025-07-01 -> 20250701
+        final String code10 = left(digits(dongCode), 10);
+        final String code8  = left(code10, 8);
 
-        return seoulClient.get()               // ✅ seoulClient 사용
-                .uri(path)
-                .retrieve()
-                .bodyToMono(Map.class)
-                .map(body -> {
-                    Object boxObj = body.get(svc);
-                    if (!(boxObj instanceof Map<?, ?> box)) return List.<LivingPopPoint>of();
-                    Object rowsObj = box.get("row");
-                    if (!(rowsObj instanceof List<?> rawRows)) return List.<LivingPopPoint>of();
+        // ★ 실제 파일 헤더 반영
+        String[] COL_DATE = {"STD_YMD","STDR_YYMMDD","STDR_DATE","BASE_DATE","기준일자","기준일ID"};
+        String[] COL_DONG = {"ADSTRD_CD","ADM_CD","ADMD_CD","법정동코드","행정동코드","ADSTRD_CODE_SE","ADSTRD_CODE"};
+        String[] COL_TIME = {"TMZON_PD_SE","TMZON_PD","HOUR_CD","TMZON","TIME","시간대","시간대구분"};
+        String[] COL_TOT  = {"TOT_LVPOP_CO","TOT_POP","TOTAL","합계","총생활인구수"};
 
-                    @SuppressWarnings("unchecked")
-                    List<Map<String, Object>> rows = (List<Map<String, Object>>) (List<?>) rawRows;
+        Map<String, Double> byTime = new LinkedHashMap<>();
+        boolean[] logged = {false};
 
-                    return rows.stream()
-                            .sorted(Comparator.comparing(m -> String.valueOf(m.getOrDefault("TMZON_PD_SE", ""))))
-                            .map(m -> LivingPopPoint.builder()
-                                    .time(mapTimeLabel(String.valueOf(m.getOrDefault("TMZON_PD_SE", ""))))
-                                    .total(asDouble(m.getOrDefault("TOT_LVPOP_CO", 0)))
-                                    // 연령 분해 컬럼이 없으므로 target은 null 유지
-                                    .build())
-                            .toList();
-                });
+        for (var rec : read(csvPath)) {
+            Map<String,String> m = row(rec);
+            if (!logged[0]) { log.info("[Seoul-CSV] headers={}", m.keySet()); logged[0]=true; }
+
+            String dNorm = left(digits(get(m, COL_DATE)), 8);
+            if (!targetDate.equals(dNorm)) continue;
+
+            String cRaw = digits(get(m, COL_DONG));
+            String c10  = left(cRaw,10);
+            String c8   = left(cRaw, 8);
+            boolean codeMatch =
+                    (!code10.isEmpty() && code10.equals(c10)) ||
+                            (!code8.isEmpty()  && code8.equals(c8));
+            if (!codeMatch) continue;
+
+            String hh = get(m, COL_TIME);                 // 값 예: "06-09" 또는 "06"
+            if (tmzonPdSe != null && !tmzonPdSe.isBlank() && !tmzonPdSe.equals(hh)) continue;
+
+            double tot = toD(get(m, COL_TOT));
+            byTime.merge(hh, tot, Double::sum);
+        }
+
+        List<LivingPopPoint> out = byTime.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .map(e -> LivingPopPoint.builder()
+                        .time(mapTimeLabel(e.getKey()))
+                        .total(Math.rint(e.getValue()))
+                        .build())
+                .collect(Collectors.toList());
+
+        log.info("[Seoul-CSV] date={} adm(8/10)={}/{} -> {} rows", targetDate, code8, code10, out.size());
+        return Mono.just(out);
     }
 
-    private static double asDouble(Object v) {
-        try { return Double.parseDouble(String.valueOf(v)); }
-        catch (Exception e) { return 0d; }
-    }
-
-    /** 시간대 코드 → 라벨(예: "06" → "06-09") */
-    private static String mapTimeLabel(String code) {
+    private static String mapTimeLabel(String code){
         if (code != null && code.matches("\\d{2}")) {
             int hh = Integer.parseInt(code);
-            int hh2 = (hh + 3) % 24;
-            return String.format("%02d-%02d", hh, hh2);
+            return String.format("%02d-%02d", hh, (hh+3)%24);
         }
-        return code == null ? "" : code; // 알 수 없으면 원문 유지
+        return code == null ? "" : code;
     }
 }

@@ -2,108 +2,114 @@ package com.example.An_Yang.service;
 
 import com.example.An_Yang.DTO.AgeShare;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Qualifier;   // ✅ 중요: 이 import 확인!
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+
+import static com.example.An_Yang.service.CsvUtils.*;
 
 @Service
 @RequiredArgsConstructor
 public class MoisResidentService {
 
-    private final @Qualifier("moisClient") WebClient moisClient;  // ✅ 어떤 WebClient를 쓸지 명시
-    @Value("${apis.mois.serviceKey}") private String key;
+    private static final Logger log = LoggerFactory.getLogger(MoisResidentService.class);
 
-    /**
-     * 행정동별 주민등록 인구(월말 스냅샷)로 연령대 비율 계산
-     * @param yyyymm  예: "202507"
-     * @param dongCd  행정(법정)동 코드
-     */
-    public Mono<List<AgeShare>> ageShareByDong(String yyyymm, String dongCd) {
-        // ⚠️ 실제 데이터셋 경로(uddi 또는 datasetId)는 포털 문서의 OpenAPI 탭에서 확인해 교체하세요.
-        final String datasetPath = "/15077756/v1/uddi-REPLACE_WITH_DATASET_ID";
+    @Value("${data.csv.moisAgeShare}")
+    private String csvPath;
 
-        return moisClient.get()
-                .uri(uriBuilder -> uriBuilder
-                        .path(datasetPath)
-                        .queryParam("serviceKey", key)
-                        .queryParam("page", 1)
-                        .queryParam("perPage", 10000)
-                        // 컬럼명은 데이터셋에 맞춰 조정: cond[기준연월::EQ], cond[행정동코드::EQ] 등
-                        .queryParam("cond[기준연월::EQ]", yyyymm)
-                        .queryParam("cond[행정동코드::EQ]", dongCd)
-                        .build())
-                .retrieve()
-                .bodyToMono(Map.class)
-                .map(MoisResidentService::toAgeShares);
-    }
+    // "12세남자", "24세여자" 같은 헤더에서 숫자만 뽑기
+    private static final Pattern AGE_NUM_PATTERN = Pattern.compile("(\\d+)");
 
-    /* ================= 내부 파서 ================= */
+    public Mono<List<AgeShare>> ageShareByDong(String yyyymm, String admCd) {
+        final String targetYm = left(digits(yyyymm), 6);
+        final String code10   = left(digits(admCd), 10);
+        final String code8    = left(code10, 8);
 
-    @SuppressWarnings("unchecked")
-    private static List<AgeShare> toAgeShares(Map<?, ?> root) {
-        List<Map<String, Object>> rows = extractRows(root);
-        if (rows.isEmpty()) {
-            return List.of(
-                    new AgeShare("10대", 0, 0),
-                    new AgeShare("20대", 0, 0),
-                    new AgeShare("30대", 0, 0),
-                    new AgeShare("40대", 0, 0),
-                    new AgeShare("50대", 0, 0),
-                    new AgeShare("60대", 0, 0)
-            );
-        }
+        // 실제 파일 헤더에 맞춰 후보 지정
+        String[] COL_YM   = {"기준연월","STD_MT","STDYM","STD_YYMM","기준_연월"};
+        String[] COL_CODE = {"행정기관코드","ADM_CD","ADMD_CD","ADSTRD_CD","행정동코드","법정동코드"};
 
-        Map<String, Integer> bucket = new LinkedHashMap<>();
-        bucket.put("10대", 0); bucket.put("20대", 0); bucket.put("30대", 0);
-        bucket.put("40대", 0); bucket.put("50대", 0); bucket.put("60대", 0);
+        // 10대 단위 버킷
+        Map<String,Integer> bucket = new LinkedHashMap<>(Map.of(
+                "10대", 0, "20대", 0, "30대", 0, "40대", 0, "50대", 0, "60대", 0, "70대+", 0
+        ));
 
-        for (Map<String, Object> r : rows) {
-            // 데이터셋에 따라 컬럼명이 다를 수 있음 → 가능한 키들을 넓게 매칭
-            add(bucket, "10대", r, "만10~14세남자","만10~14세여자","만15~19세남자","만15~19세여자",
-                    "10~14세남","10~14세여","15~19세남","15~19세여");
-            add(bucket, "20대", r, "만20~24세남자","만20~24세여자","만25~29세남자","만25~29세여자",
-                    "20~24세남","20~24세여","25~29세남","25~29세여");
-            add(bucket, "30대", r, "만30~34세남자","만30~34세여자","만35~39세남자","만35~39세여자",
-                    "30~34세남","30~34세여","35~39세남","35~39세여");
-            add(bucket, "40대", r, "만40~44세남자","만40~44세여자","만45~49세남자","만45~49세여자",
-                    "40~44세남","40~44세여","45~49세남","45~49세여");
-            add(bucket, "50대", r, "만50~54세남자","만50~54세여자","만55~59세남자","만55~59세여자",
-                    "50~54세남","50~54세여","55~59세남","55~59세여");
-            add(bucket, "60대", r, "만60~64세남자","만60~64세여자","만65~69세남자","만65~69세여자",
-                    "60~64세남","60~64세여","65~69세남","65~69세여");
+        boolean[] logged = {false};
+
+        for (var rec : read(csvPath)) {
+            Map<String,String> m = row(rec);
+            if (!logged[0]) { log.info("[MOIS-CSV] headers={}", m.keySet()); logged[0] = true; }
+
+            // 연월 매칭
+            String ym = left(digits(get(m, COL_YM)), 6);
+            if (!targetYm.equals(ym)) continue;
+
+            // 코드 매칭(10자리 or 8자리)
+            String cRaw = digits(get(m, COL_CODE));
+            String c10  = left(cRaw, 10);
+            String c8   = left(cRaw, 8);
+            boolean match = (!code10.isEmpty() && code10.equals(c10))
+                    || (!code8.isEmpty()  && code8.equals(c8));
+            if (!match) continue;
+
+            // 모든 컬럼 순회하며 "xx세남자/여자" 형태만 합산
+            for (var e : m.entrySet()) {
+                String k = e.getKey();       // 예: "24세남자"
+                String v = e.getValue();
+
+                // 남자/여자 총계/계, 이름/지역 등은 패스
+                String keyLower = k.toLowerCase(Locale.ROOT);
+                if (keyLower.equals("남자") || keyLower.equals("여자") || keyLower.equals("계")) continue;
+                if (!keyLower.contains("세")) continue; // 연령 아닌 컬럼 스킵
+
+                Integer age = extractAge(k);
+                if (age == null) continue;
+
+                String b = toDecadeBucket(age);
+                int val = toI(v);
+                bucket.merge(b, val, Integer::sum);
+            }
         }
 
         int total = bucket.values().stream().mapToInt(Integer::intValue).sum();
-        List<AgeShare> out = new ArrayList<>(bucket.size());
-        for (var e : bucket.entrySet()) {
-            double ratio = (total == 0) ? 0.0 : Math.round(e.getValue() * 1000.0 / total) / 10.0; // 소수1자리
-            out.add(new AgeShare(e.getKey(), e.getValue(), ratio));
-        }
-        return out;
+        if (total <= 0) return Mono.just(List.of());
+
+        List<AgeShare> out = bucket.entrySet().stream()
+                .map(en -> {
+                    double pct = en.getValue() * 100.0 / total;
+                    double rounded = Math.round(pct * 10.0) / 10.0;
+                    return new AgeShare(en.getKey(), en.getValue(), rounded);
+                })
+                .collect(Collectors.toList());
+
+        log.info("[MOIS-CSV] ym={} adm(8/10)={}/{} -> {} buckets (total={})",
+                targetYm, code8, code10, out.size(), total);
+        return Mono.just(out);
     }
 
-    @SuppressWarnings("unchecked")
-    private static List<Map<String, Object>> extractRows(Map<?, ?> root) {
-        for (String k : List.of("data", "rows", "items")) {
-            Object v = root.get(k);
-            if (v instanceof List<?> l && !l.isEmpty() && l.get(0) instanceof Map) {
-                return (List<Map<String, Object>>) (List<?>) l;
-            }
+    private static Integer extractAge(String header){
+        Matcher m = AGE_NUM_PATTERN.matcher(header);
+        if (m.find()) {
+            try { return Integer.parseInt(m.group(1)); } catch (Exception ignored) {}
         }
-        return List.of();
+        return null;
     }
 
-    private static void add(Map<String, Integer> bucket, String key, Map<String, Object> row, String... cols) {
-        int s = 0;
-        for (String c : cols) {
-            Object v = row.get(c);
-            if (v == null) continue;
-            try { s += Integer.parseInt(String.valueOf(v)); } catch (Exception ignored) {}
-        }
-        bucket.merge(key, s, Integer::sum);
+    private static String toDecadeBucket(int age){
+        if (age < 10)      return "10대";   // 10대 미만은 비율 작아 보통 10대에 포함 처리
+        else if (age < 20) return "10대";
+        else if (age < 30) return "20대";
+        else if (age < 40) return "30대";
+        else if (age < 50) return "40대";
+        else if (age < 60) return "50대";
+        else if (age < 70) return "60대";
+        else               return "70대+";
     }
 }

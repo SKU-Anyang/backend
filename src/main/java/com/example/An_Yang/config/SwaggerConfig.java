@@ -116,4 +116,14 @@ public class SwaggerConfig {
                         .description("추천 생성/조회/삭제 등 CRUD")))
                 .build();
     }
+    @Bean public GroupedOpenApi insightApi() {
+        return GroupedOpenApi.builder()
+                .group("insight")
+                .pathsToMatch("/api/insights/**")
+                .addOpenApiCustomizer(api -> api.info(new Info()
+                        .title("Insight API")
+                        .version("v1")
+                        .description("차트 api")))
+                .build();
+    }
 }

@@ -41,12 +41,13 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         // === 공개 엔드포인트 (Postman 테스트용) ===
                         .requestMatchers(
+                                "/api/insights/**",                  // ✅ 여기 추가
                                 "/api/ai/**",
                                 "/api/auth/**",
                                 "/api/chat/**", "/api/history/**", "/api/diag/**",
                                 "/api/kakao/**", "/api/ftc/**", "/api/recommendations/**",
                                 "/swagger-ui/**", "/v3/api-docs/**", "/actuator/**", "/h2-console/**",
-                                "/error"   // ← 에러 디스패치도 허용 (중요)
+                                "/error" // 에러 디스패치
                         ).permitAll()
                         // 그 외는 인증 필요
                         .anyRequest().authenticated()
