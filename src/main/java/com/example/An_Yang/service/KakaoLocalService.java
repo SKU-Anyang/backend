@@ -18,23 +18,23 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class KakaoLocalService {
 
-    // ✅ Qualifier로 정확히 kakaoClient 주입
+    // ✅ KakaoApiConfig에서 만든 WebClient 주입
     private final @Qualifier("kakaoClient") WebClient kakaoClient;
 
     /** 키워드 검색: 한 페이지 */
     public Mono<KakaoResp> searchKeywordPage(double lat, double lng, int radius, String query, int page) {
         int r = clampRadius(radius);
         int p = clampPage(page);
-        int size = 15;     // 필요하면 파라미터화
+        int size = 15;
 
         return kakaoClient.get().uri(uri -> uri.path("/v2/local/search/keyword.json")
                         .queryParam("query", query)
-                        .queryParam("y", lat)           // lat
-                        .queryParam("x", lng)           // lng
-                        .queryParam("radius", r)        // ✅ 전달값 사용
-                        .queryParam("page", p)          // ✅ 전달값 사용 (1~45)
-                        .queryParam("size", size)       // 1~45
-                        .queryParam("sort", "distance") // 좌표 기반이면 distance 권장
+                        .queryParam("y", lat)
+                        .queryParam("x", lng)
+                        .queryParam("radius", r)
+                        .queryParam("page", p)
+                        .queryParam("size", size)
+                        .queryParam("sort", "distance")
                         .build())
                 .retrieve()
                 .onStatus(s -> s.is4xxClientError() || s.is5xxServerError(),
@@ -51,11 +51,11 @@ public class KakaoLocalService {
         int size = 15;
 
         return kakaoClient.get().uri(uri -> uri.path("/v2/local/search/category.json")
-                        .queryParam("category_group_code", code) // CE7, FD6 ...
+                        .queryParam("category_group_code", code) // CE7, FD6 등
                         .queryParam("y", lat)
                         .queryParam("x", lng)
-                        .queryParam("radius", r)   // ✅ 전달값 사용
-                        .queryParam("page", p)     // ✅ 전달값 사용
+                        .queryParam("radius", r)
+                        .queryParam("page", p)
                         .queryParam("size", size)
                         .build())
                 .retrieve()
@@ -92,6 +92,29 @@ public class KakaoLocalService {
                 .bodyToMono(String.class);
     }
 
+    /** 좌표 → 법정동코드 */
+    @SuppressWarnings("unchecked")
+    public Mono<String> toLegalDongCode(double lat, double lng) {
+        return kakaoClient.get()
+                .uri(uriBuilder -> uriBuilder
+                        .path("/v2/local/geo/coord2regioncode.json")
+                        .queryParam("x", lng) // 경도
+                        .queryParam("y", lat) // 위도
+                        .build())
+                .retrieve()
+                .bodyToMono(Map.class)
+                .map(m -> {
+                    List<Map<String, Object>> docs = (List<Map<String, Object>>) m.get("documents");
+                    if (docs == null || docs.isEmpty()) {
+                        throw new RuntimeException("좌표->법정동코드 실패: 결과 없음");
+                    }
+                    Map<String, Object> first = docs.stream()
+                            .filter(d -> "B".equals(String.valueOf(d.get("region_type")))) // 법정동(B) 우선
+                            .findFirst().orElse(docs.get(0));
+                    return String.valueOf(first.getOrDefault("code", ""));
+                });
+    }
+
     // ----- 내부 유틸 -----
 
     /** 첫 페이지를 기준으로 전체 페이지 수 계산 후 순차 수집 */
@@ -108,7 +131,7 @@ public class KakaoLocalService {
             Mono<List<KakaoPlace>> merged = (maxPage == 1)
                     ? Mono.just(acc)
                     : Flux.range(2, maxPage - 1)   // 2..maxPage
-                    .concatMap(pageFetcher)        // 순차 요청(쿼터 안정)
+                    .concatMap(pageFetcher)    // 순차 요청(쿼터 안정)
                     .map(r -> Optional.ofNullable(r.documents()).orElseGet(List::of))
                     .reduce(acc, (list, cur) -> { list.addAll(cur); return list; });
 

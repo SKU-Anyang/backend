@@ -6,9 +6,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/bookmarks")
+@RequestMapping("/api/bookmarks") // ★ /api 로 통일
 public class BookmarkController {
 
     private final BookmarkService bookmarkService;
@@ -28,5 +30,12 @@ public class BookmarkController {
         String userId = (String) auth.getPrincipal();
         bookmarkService.remove(userId, ideaId);
         return ResponseEntity.noContent().build(); // 204 No Content (idempotent)
+    }
+
+    /** ★ 찜 목록: GET /api/bookmarks  (토큰 필요) */
+    @GetMapping
+    public ResponseEntity<List<BookmarkService.BookmarkItem>> list(Authentication auth) {
+        String userId = (String) auth.getPrincipal();
+        return ResponseEntity.ok(bookmarkService.list(userId));
     }
 }

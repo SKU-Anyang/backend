@@ -14,6 +14,7 @@ public class KakaoApiConfig {
             @Value("${apis.kakao.baseUrl}") String baseUrl,
             @Value("${apis.kakao.restKey}") String restKey
     ) {
+        // Kakao 로컬 API: Authorization 헤더 필수
         return WebClient.builder()
                 .baseUrl(baseUrl)
                 .defaultHeader(HttpHeaders.AUTHORIZATION, "KakaoAK " + restKey)

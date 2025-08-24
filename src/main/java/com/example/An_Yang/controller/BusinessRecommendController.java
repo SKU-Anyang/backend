@@ -1,6 +1,6 @@
 package com.example.An_Yang.controller;
 
-import com.example.An_Yang.dto.BusinessRecommendDTO;
+import com.example.An_Yang.DTO.BusinessRecommendDTO;
 import com.example.An_Yang.service.BusinessRecommendService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
