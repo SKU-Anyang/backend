@@ -1,7 +1,7 @@
 package com.example.An_Yang.service;
 
 import com.example.An_Yang.domain.BusinessRecommend;
-import com.example.An_Yang.dto.BusinessRecommendDTO;
+import com.example.An_Yang.DTO.BusinessRecommendDTO;
 import com.example.An_Yang.repository.BusinessRecommendRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

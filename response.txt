@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
+    <soapenv:Body>
+        <soapenv:Fault>
+            <faultcode>soapenv:Server</faultcode>
+            <faultstring>Policy Falsified</faultstring>
+            <faultactor>https://apis.data.go.kr/1130000/FftcIndutyFrcsOpclStatsService/getOpclStats?serviceKey=aXJCcoLEku2k0PufWIaxo2ePRT9rWVVelckIr1J%2bssTxkwxL1ICglPeQeb9rlJ%2f5IDVpgVgscaZj8oHYk7VjTw%3d%3d&amp;returnType=json&amp;yr=2021&amp;indutyLclsCd=01&amp;pageNo=1&amp;numOfRows=10</faultactor>
+            <detail>
+                <l7:policyResult
+                    status="Service Not Found.  The request may have been sent to an invalid URL, or intended for an unsupported operation." xmlns:l7="http://www.layer7tech.com/ws/policy/fault"/>
+            </detail>
+        </soapenv:Fault>
+    </soapenv:Body>
+</soapenv:Envelope>

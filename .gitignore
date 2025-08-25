@@ -35,3 +35,8 @@ out/
 
 ### VS Code ###
 .vscode/
+
+# ignore large/local data
+src/main/resources/data/
+*.csv
+*.DS_Store
