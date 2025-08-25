@@ -1,6 +1,8 @@
 package com.example.An_Yang.controller;
 
 import com.example.An_Yang.DTO.ai.*;
+import com.example.An_Yang.domain.Idea;
+import com.example.An_Yang.service.IdeaService;
 import com.example.An_Yang.service.BookmarkService;
 import com.example.An_Yang.service.GptService;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +19,8 @@ public class AiController {
 
     private final GptService gptService;
     private final BookmarkService bookmarkService; // ★ 추가
+    private final IdeaService ideaService;
+
 
     @PostMapping("/idea")
     public ResponseEntity<String> idea(@RequestBody IdeaRequest req) {
@@ -128,9 +132,9 @@ public class AiController {
             Authentication auth
     ) {
         String userId = (String) auth.getPrincipal();
-        List<String> likedSummaries = bookmarkService.listSummaries(userId); // 제목/요약 자동 수집
+        var likedSummaries = bookmarkService.listSummaries(userId);
         if (likedSummaries.isEmpty()) {
-            return ResponseEntity.ok("찜한 아이디어가 없어 기본 추천을 제시합니다.\n- " + String.join("\n- ", List.of(
+            return ResponseEntity.ok("찜한 아이디어가 없어 기본 추천을 제시합니다.\n- " + String.join("\n- ", java.util.List.of(
                     "로컬 스페셜티 카페", "베이킹 클래스 스튜디오", "펫프렌들리 라운지", "수제 디저트 바", "플라워 DIY 카페"
             )));
         }
@@ -149,4 +153,81 @@ public class AiController {
                 """.formatted(region, profile == null ? "-" : profile, Math.max(take, 1), joined);
         return ResponseEntity.ok(gptService.chat(prompt));
     }
+
+    /**
+     * ★ 원샷: (1) AI 아이디어 저장(upsert) -> (2) 찜 등록 -> (3) 유사 아이디어 추천
+     * POST /api/ai/idea/bookmark-and-suggest  (토큰 필요)
+     */
+    @PostMapping("/idea/bookmark-and-suggest")
+    public ResponseEntity<?> bookmarkAndSuggest(@RequestBody BookmarkAndSuggestReq req, Authentication auth) {
+        String userId = (String) auth.getPrincipal();
+
+        if (isBlank(req.title))   return ResponseEntity.badRequest().body(new ErrorRes("TITLE_REQUIRED", "title은 필수입니다."));
+        if (isBlank(req.region))  return ResponseEntity.badRequest().body(new ErrorRes("REGION_REQUIRED", "region은 필수입니다."));
+        if (isBlank(req.industry))return ResponseEntity.badRequest().body(new ErrorRes("INDUSTRY_REQUIRED", "industry는 필수입니다."));
+
+        // (1) upsert 저장 (title + region + industry로 중복 방지)
+        Idea idea = ideaService.upsertIdeaFromAi(
+                userId,
+                req.title,
+                req.summary,
+                req.industry,
+                req.region,
+                req.contentJson,
+                req.closureYear,
+                req.closureRate
+        );
+
+        // (2) 찜 처리 (idempotent)
+        bookmarkService.add(userId, idea.getId());
+
+        // (3) 유사 아이디어 추천
+        String prompt = """
+                [ROLE] 유사 아이디어 추천기
+                [기준 아이디어]
+                - 제목: %s
+                - 요약: %s
+                - 지역: %s
+                - 업종: %s
+                - 폐업지표: 연도=%s, 폐업률=%.2f%%
+
+                [요청]
+                - 위와 유사하지만 '겹치지 않는' 실행 가능한 신규 아이디어 5개
+                - 각 아이디어는 '개념·타깃·상품/서비스·운영포인트·차별화' 5줄로 간결하게
+                - 한국 소상공인 맥락, 과장 금지, 지역 맥락 반영
+                """.formatted(
+                nullToDash(idea.getTitle()),
+                nullToDash(idea.getSummary()),
+                nullToDash(idea.getRegion()),
+                nullToDash(idea.getIndustry()),
+                idea.getClosureYear() == null ? "-" : idea.getClosureYear().toString(),
+                idea.getClosureRate() == null ? 0.0 : idea.getClosureRate()
+        );
+        String similar = gptService.chat(prompt);
+
+        return ResponseEntity.ok(new BookmarkAndSuggestRes(idea.getId(), true, similar));
+    }
+
+    /* ------------ DTO & utils ------------ */
+
+    public record BookmarkAndSuggestReq(
+            String title,
+            String summary,
+            String industry,
+            String region,
+            String contentJson,
+            Integer closureYear,
+            Double closureRate
+    ) {}
+
+    public record BookmarkAndSuggestRes(
+            Long ideaId,
+            boolean bookmarked,
+            String similarIdeas
+    ) {}
+
+    public record ErrorRes(String code, String message) {}
+
+    private static boolean isBlank(String s) { return s == null || s.trim().isEmpty(); }
+    private static String nullToDash(String s) { return (s == null || s.isBlank()) ? "-" : s; }
 }
