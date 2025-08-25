@@ -41,6 +41,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         // === 공개 엔드포인트 (Postman 테스트용) ===
                         .requestMatchers(
+                                "/api/**",
                                 "/api/insights/**",                  // ✅ 여기 추가
                                 "/api/ai/**",
                                 "/api/auth/**",

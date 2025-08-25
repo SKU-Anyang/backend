@@ -23,6 +23,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     private static final String[] PUBLIC_PATHS = {
             "/api/ai/**",
             "/api/auth/**",
+            "/api/bookmarks/**",
             "/swagger-ui/**",
             "/v3/api-docs/**",
             "/actuator/**",
